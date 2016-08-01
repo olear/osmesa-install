@@ -1,31 +1,70 @@
 #!/bin/sh -e
+
+# make threads
+mkjobs=4
+if [ "${MKJOBS:-}" != "" ]; then
+  mkjobs="${MKJOBS}"
+fi
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
+if [ "${OSMESA_INSTALL_PREFIX:-}" != "" ]; then
+  osmesaprefix="${OSMESA_INSTALL_PREFIX}"
+fi
 # mesa version
 mesaversion=12.0.1
+if [ "${MESA_VERSION:-}" != "" ]; then
+  mesaversion="${MESA_VERSION}"
+fi
 # mesa-demos version
 demoversion=8.3.0
+if [ "${MESA_DEMO_VERSION:-}" != "" ]; then
+  demoversion="${MESA_DEMO_VERSION}"
+fi
 # glu version
 gluversion=9.0.0
+if [ "${GLU_VERSION:-}" != "" ]; then
+  gluversion="${GLU_VERSION}"
+fi
 # set debug to 1 to compile a version with debugging symbols
 debug=0
+if [ "${OSMESA_DEBUG:-}" = "1" ]; then
+  debug=1
+fi
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
+if [ "${OSMESA_CLEAN:-}" = "0" ]; then
+  clean=0
+fi
 # set osmesadriver to:
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
 # - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=3
+if [ "${OSMESA_DRIVER:-}" != "" ]; then
+  osmesadriver="${OSMESA_DRIVER}"
+fi
 # do we want a mangled mesa + GLU ?
 mangled=1
+if [ "${OSMESA_MANGLED:-}" = "0" ]; then
+  mangled=0
+fi
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
+if [ "${LLVM_INSTALL_PREFIX:-}" != "" ]; then
+  llvmprefix="${LLVM_INSTALL_PREFIX}"
+fi
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
+if [ "${BUILD_LLVM:-}" = "1" ]; then
+  buildllvm=1
+fi
 llvmversion=3.8.1
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
+fi
+if [ "${LLVM_VERSION:-}" != "" ]; then
+  llvmversion="${LLVM_VERSION}"
 fi
 
 # tell curl to continue downloads
@@ -133,7 +172,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
               --enable-targets=host --disable-profiling \
 	      --disable-backtraces $debugopts
-	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
+	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
 	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
@@ -163,7 +202,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j4
+          env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
           cd ..
       fi
@@ -173,7 +212,7 @@ if [ "$osmesadriver" = 3 ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
       echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
-      echo " env REQUIRES_RTTI=1 make -j4"
+      echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
       exit
    fi
    llvmcomponents="engine"
@@ -246,7 +285,7 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-test -f Mafefile && make -j4 distclean # if in an existing build
+test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
  
 autoreconf -fi
 
@@ -316,7 +355,7 @@ fi
 
 env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
-make -j4
+make -j${mkjobs}
 
 echo "* installing Mesa..."
 
@@ -351,7 +390,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
-make -j4
+make -j${mkjobs}
 make install
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
@@ -374,6 +413,11 @@ if [ "$mangled" = 1 ]; then
 else
     LIBS32="-lOSMesa32 -lGLU"
 fi
+
+if [ `uname -o` = "GNU/Linux" ]; then
+    LIBS32="${LIBS32} -pthread -ldl -lcrypto -lz -lcurses"
+fi
+
 echo c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 ./osdemo32 image.tga
