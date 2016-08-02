@@ -233,7 +233,7 @@ if [ "$osmesadriver" = 3 ]; then
       echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
       exit
    fi
-   llvmcomponents="engine"
+   llvmcomponents="engine mcjit"
    if [ "$debug" = 1 ]; then
        llvmcomponents="$llvmcomponents mcdisassembler"
    fi
@@ -267,6 +267,7 @@ lp_scene-safe.patch \
 gallium-once-flag.patch \
 osmesa-gallium-driver.patch \
 install-GL-headers.patch \
+redefinition-of-typedef-nirshader.patch \
 "
 
 if [ `uname` = Darwin ]; then
