@@ -1,39 +1,48 @@
 #!/bin/sh -e
 
+# check for mingw
+mingw=0
+if [ `uname -o` = Msys ]; then
+    mingw=1
+    if [ "${BIT:-}" = "" ]; then
+        echo "You must define BIT on MSYS"
+        exit 1
+    fi
+fi
 # make threads
 mkjobs=4
 if [ "${MKJOBS:-}" != "" ]; then
-  mkjobs="${MKJOBS}"
+    mkjobs="${MKJOBS}"
 fi
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
 if [ "${OSMESA_INSTALL_PREFIX:-}" != "" ]; then
-  osmesaprefix="${OSMESA_INSTALL_PREFIX}"
+    osmesaprefix="${OSMESA_INSTALL_PREFIX}"
 fi
 # mesa version
 mesaversion=12.0.1
 if [ "${MESA_VERSION:-}" != "" ]; then
-  mesaversion="${MESA_VERSION}"
+    mesaversion="${MESA_VERSION}"
 fi
 # mesa-demos version
 demoversion=8.3.0
 if [ "${MESA_DEMO_VERSION:-}" != "" ]; then
-  demoversion="${MESA_DEMO_VERSION}"
+    demoversion="${MESA_DEMO_VERSION}"
 fi
 # glu version
 gluversion=9.0.0
 if [ "${GLU_VERSION:-}" != "" ]; then
-  gluversion="${GLU_VERSION}"
+    gluversion="${GLU_VERSION}"
 fi
 # set debug to 1 to compile a version with debugging symbols
 debug=0
 if [ "${OSMESA_DEBUG:-}" = "1" ]; then
-  debug=1
+    debug=1
 fi
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
 if [ "${OSMESA_CLEAN:-}" = "0" ]; then
-  clean=0
+    clean=0
 fi
 # set osmesadriver to:
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
@@ -42,29 +51,32 @@ fi
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=3
 if [ "${OSMESA_DRIVER:-}" != "" ]; then
-  osmesadriver="${OSMESA_DRIVER}"
+    osmesadriver="${OSMESA_DRIVER}"
 fi
 # do we want a mangled mesa + GLU ?
 mangled=1
 if [ "${OSMESA_MANGLED:-}" = "0" ]; then
-  mangled=0
+    mangled=0
 fi
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
 if [ "${LLVM_INSTALL_PREFIX:-}" != "" ]; then
-  llvmprefix="${LLVM_INSTALL_PREFIX}"
+    llvmprefix="${LLVM_INSTALL_PREFIX}"
 fi
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
 if [ "${BUILD_LLVM:-}" = "1" ]; then
-  buildllvm=1
+    buildllvm=1
 fi
 llvmversion=3.8.1
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
+elif [ "$mingw" = 1 ]; then
+    # the scons build system on win does not support llvm 3.8 yet
+    llvmversion=3.7.1
 fi
 if [ "${LLVM_VERSION:-}" != "" ]; then
-  llvmversion="${LLVM_VERSION}"
+    llvmversion="${LLVM_VERSION}"
 fi
 
 # tell curl to continue downloads
@@ -183,7 +195,13 @@ if [ "$osmesadriver" = 3 ]; then
 
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
-	  fi
+          elif [ "$mingw" = 1 ]; then
+              patch -p1 < "$srcdir"/../patches/llvm/msys_pi.diff || exit 1
+              cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --cflags libffi|sed 's#-I##'`"
+              CMAKE_OVERRIDE=-G
+              CMAKE_MSYS="MSYS Makefiles"
+          fi
+
           mkdir build
           cd build
 	  if [ "$debug" = 1 ]; then
@@ -192,7 +210,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake ${CMAKE_OVERRIDE:-} "${CMAKE_MSYS:-}" .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -202,8 +220,8 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j${mkjobs}
-          make install
+          env REQUIRES_RTTI=1 make -j${mkjobs} || exit 1
+          make install || exit 1
           cd ..
       fi
       cd ..
@@ -262,12 +280,19 @@ if [ `uname` = Darwin ]; then
     static-strndup.patch \
     no-missing-prototypes-error.patch \
     "
+elif [ "${mingw}" = 1 ]; then
+    PATCHES="$PATCHES \
+    msys_pi.patch"
+    if [ "${mesaversion}" = "11.2.2" ]; then
+        PATCHES="$PATCHES \
+        win_swrast.patch"
+    fi
 fi
 
 for i in $PATCHES; do
     if [ -f "$srcdir"/patches/mesa-$mesaversion/$i ]; then
 	echo "* applying patch $i"
-	patch -p1 -d mesa-${mesaversion} < "$srcdir"/patches/mesa-$mesaversion/$i
+	patch -p1 -d mesa-${mesaversion} < "$srcdir"/patches/mesa-$mesaversion/$i || exit 1
     fi
 done
 
@@ -285,9 +310,12 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
- 
-autoreconf -fi
+if [ "$mingw" != 1 ]; then
+    test -f Makefile && make -j${mkjobs} distclean # if in an existing build
+    autoreconf -fi
+else
+    rm -rf build
+fi
 
 confopts="\
     --disable-dependency-tracking \
@@ -314,6 +342,7 @@ confopts="\
     --prefix=$osmesaprefix \
 "
 
+MESA_MSYS_LLVMPIPE=no
 if [ "$osmesadriver" = 1 ]; then
     # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
     confopts="${confopts} \
@@ -339,6 +368,7 @@ else
      --disable-llvm-shared-libs \
      --with-gallium-drivers=swrast \
     "
+    MESA_MSYS_LLVMPIPE=yes
 fi
 
 if [ "$debug" = 1 ]; then
@@ -351,15 +381,75 @@ if [ "$mangled" = 1 ]; then
      --enable-mangling"
     #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
     #rm src/mesa/main/remap_helper.h
+    if [ "$mingw" = 1 ]; then
+        sed -i 's/gl/mgl/g' src/gallium/targets/osmesa/osmesa.def
+        sed -i 's/gl/mgl/g' src/gallium/targets/osmesa/osmesa.mingw.def
+        MESA_MSYS_MANGLE="-DUSE_MGL_NAMESPACE"
+    fi
 fi
 
-env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+if [ "$mingw" != 1 ]; then
+    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" || exit 1
+    make -j${mkjobs} || exit 1
+    echo "* installing Mesa..."
+    make install || exit 1
+else
+    if [ "$debug" = 1 ]; then
+        MESA_MSYS_BUILD=debug
+    else
+        MESA_MSYS_BUILD=release
+    fi
+    if [ "$BIT" = 32 ]; then
+        MESA_MSYS_ARCH=x86
+    elif [ "$BIT" = 64 ]; then
+        MESA_MSYS_ARCH=x86_64
+    fi
 
-make -j${mkjobs}
+    if [ "$mangled" = 1 ]; then
+       MESA_MSYS_TARGET=MangledOSMesa32
+    else
+       MESA_MSYS_TARGET=OSMesa32
+    fi
 
-echo "* installing Mesa..."
+    sed -i "s/'osmesa'/'${MESA_MSYS_TARGET}'/" src/mesa/drivers/osmesa/SConscript
+    sed -i '$ d' src/mesa/drivers/osmesa/SConscript
+    echo "env.Alias('${MESA_MSYS_TARGET}', 'osmesa')" >> src/mesa/drivers/osmesa/SConscript
+    echo "env.Alias('osmesa', gallium_osmesa)" >> src/mesa/drivers/osmesa/SConscript
 
-make install
+    sed -i "s/'osmesa'/'${MESA_MSYS_TARGET}'/" src/gallium/targets/osmesa/SConscript
+    sed -i '$ d' src/gallium/targets/osmesa/SConscript
+    echo "env.Alias('${MESA_MSYS_TARGET}', 'osmesa')" >> src/gallium/targets/osmesa/SConscript
+    echo "env.Alias('osmesa', gallium_osmesa)" >> src/gallium/targets/osmesa/SConscript
+    
+    LLVM_CONFIG="$llvmprefix"/bin/llvm-config.exe LLVM="$llvmprefix" CFLAGS="${MESA_MSYS_MANGLE}" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=$MESA_MSYS_BUILD platform=windows toolchain=mingw machine=$MESA_MSYS_ARCH texture_float=yes llvm=${MESA_MSYS_LLVMPIPE} verbose=yes osmesa || exit 1
+
+    echo "* installing Mesa..."
+    mkdir -p "$osmesaprefix"/include "$osmesaprefix"/lib/pkgconfig
+
+cat << 'EOF' > "${osmesaprefix}/lib/pkgconfig/osmesa.pc"
+prefix=__MESA_PATH__
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: osmesa
+Description: Mesa Off-screen Rendering library
+Requires: 
+Version: 8
+Libs: -L${libdir} -l__MESA_LIB__
+Cflags: -I${includedir}
+EOF
+
+    sed -i "s#__MESA_PATH__#${osmesaprefix}#;s#__MESA_LIB__#${MESA_MSYS_TARGET}#" "${osmesaprefix}"/lib/pkgconfig/osmesa.pc
+    ln -sf "${osmesaprefix}"/lib/pkgconfig/osmesa.pc "${osmesaprefix}"/lib/pkgconfig/gl.pc
+    if [ "$osmesadriver" = 1 ]; then
+        cp build/windows-$MESA_MSYS_ARCH/mesa/drivers/osmesa/*.dll "${osmesaprefix}"/lib/ || exit 1
+    else
+        cp build/windows-$MESA_MSYS_ARCH/gallium/targets/osmesa/*.dll "${osmesaprefix}"/lib/ || exit 1
+    fi
+    cp -a include/GL "${osmesaprefix}"/include/ || exit 1
+fi
+
 if [ `uname` = Darwin ]; then
     # fix the following error:
     #Undefined symbols for architecture x86_64:
@@ -389,9 +479,9 @@ if [ "$mangled" = 1 ]; then
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
 fi
 
-env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
-make -j${mkjobs}
-make install
+env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" || exit 1
+make -j${mkjobs} || exit 1
+make install || exit 1
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
@@ -400,6 +490,16 @@ if [ "$mangled" = 1 ]; then
 fi
 
 # build the demo
+
+# Issues on msys:
+# osdemo32.c:(.text.startup+0xe1): undefined reference to `__imp_mgluNewQuadric'
+# osdemo32.c:(.text.startup+0x347): undefined reference to `__imp_mgluCylinder'
+# osdemo32.c:(.text.startup+0x3a7): undefined reference to `__imp_mgluSphere'
+# osdemo32.c:(.text.startup+0x3bf): undefined reference to `__imp_mgluDeleteQuadric'
+if [ "$mingw" = 1 ]; then
+  exit
+fi
+
 cd ..
 curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2
 tar jxf mesa-demos-${demoversion}.tar.bz2
@@ -414,7 +514,7 @@ else
     LIBS32="-lOSMesa32 -lGLU"
 fi
 
-if [ `uname -o` = "GNU/Linux" ]; then
+if [ `uname` = "Linux" ]; then
     LIBS32="${LIBS32} -pthread -ldl -lcrypto -lz -lcurses"
 fi
 
