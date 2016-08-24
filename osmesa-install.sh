@@ -197,7 +197,7 @@ if [ "$osmesadriver" = 3 ]; then
               #configure.cxxflags-append -U__STRICT_ANSI__
           elif [ "$mingw" = 1 ]; then
               patch -p1 < "$srcdir"/../patches/llvm/msys_pi.diff || exit 1
-              cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --cflags libffi|sed 's#-I##'`"
+              cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --variable=includedir libffi`"
               CMAKE_OVERRIDE=-G
               CMAKE_MSYS="MSYS Makefiles"
           fi
@@ -412,14 +412,14 @@ else
        MESA_MSYS_TARGET=OSMesa32
     fi
 
-    sed -i "s/'osmesa'/'${MESA_MSYS_TARGET}'/" src/mesa/drivers/osmesa/SConscript
+    sed -i "s/'osmesa'/'lib${MESA_MSYS_TARGET}'/" src/mesa/drivers/osmesa/SConscript
     sed -i '$ d' src/mesa/drivers/osmesa/SConscript
-    echo "env.Alias('${MESA_MSYS_TARGET}', 'osmesa')" >> src/mesa/drivers/osmesa/SConscript
-    echo "env.Alias('osmesa', gallium_osmesa)" >> src/mesa/drivers/osmesa/SConscript
+    echo "env.Alias('lib${MESA_MSYS_TARGET}', 'osmesa')" >> src/mesa/drivers/osmesa/SConscript
+    echo "env.Alias('osmesa', osmesa)" >> src/mesa/drivers/osmesa/SConscript
 
-    sed -i "s/'osmesa'/'${MESA_MSYS_TARGET}'/" src/gallium/targets/osmesa/SConscript
+    sed -i "s/'osmesa'/'lib${MESA_MSYS_TARGET}'/" src/gallium/targets/osmesa/SConscript
     sed -i '$ d' src/gallium/targets/osmesa/SConscript
-    echo "env.Alias('${MESA_MSYS_TARGET}', 'osmesa')" >> src/gallium/targets/osmesa/SConscript
+    echo "env.Alias('lib${MESA_MSYS_TARGET}', 'osmesa')" >> src/gallium/targets/osmesa/SConscript
     echo "env.Alias('osmesa', gallium_osmesa)" >> src/gallium/targets/osmesa/SConscript
     
     LLVM_CONFIG="$llvmprefix"/bin/llvm-config.exe LLVM="$llvmprefix" CFLAGS="${MESA_MSYS_MANGLE}" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=$MESA_MSYS_BUILD platform=windows toolchain=mingw machine=$MESA_MSYS_ARCH texture_float=yes llvm=${MESA_MSYS_LLVMPIPE} verbose=yes osmesa || exit 1
@@ -483,6 +483,7 @@ fi
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" || exit 1
 make -j${mkjobs} || exit 1
 make install || exit 1
+
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
@@ -497,9 +498,6 @@ fi
 # osdemo32.c:(.text.startup+0x347): undefined reference to `__imp_mgluCylinder'
 # osdemo32.c:(.text.startup+0x3a7): undefined reference to `__imp_mgluSphere'
 # osdemo32.c:(.text.startup+0x3bf): undefined reference to `__imp_mgluDeleteQuadric'
-if [ "$mingw" = 1 ]; then
-  exit
-fi
 
 cd ..
 curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2
