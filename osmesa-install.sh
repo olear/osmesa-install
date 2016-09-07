@@ -196,7 +196,7 @@ if [ "$osmesadriver" = 3 ]; then
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
           elif [ "$mingw" = 1 ]; then
-              patch -p1 < "$srcdir"/../patches/llvm/msys_pi.diff || exit 1
+              patch -p1 < "$srcdir"/../patches/llvm/msys_pi.patch || exit 1
               cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --variable=includedir libffi`"
               CMAKE_OVERRIDE=-G
               CMAKE_MSYS="MSYS Makefiles"
