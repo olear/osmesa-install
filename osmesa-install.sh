@@ -202,7 +202,7 @@ if [ "$osmesadriver" = 3 ]; then
               CMAKE_MSYS="MSYS Makefiles"
           fi
 	  if [ "${LLVM_FORCE_LIBFFI:-}" = 1 ]; then
-             cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --variable=includedir libffi`"
+             cmake_archflags="$cmake_archflags -DFFI_INCLUDE_DIR=`pkg-config --variable=includedir libffi` -DFFI_LIBRARY_DIR=`pkg-config --variable=libdir libffi`"
           fi
 
           mkdir build
