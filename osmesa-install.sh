@@ -4,14 +4,14 @@
 mingw=0
 if [ `uname -o` = Msys ]; then
     mingw=1
-    if [ "${BIT:-}" = "" ]; then
-        echo "You must define BIT on MSYS"
+    if [ -z "${BIT:-}" ]; then
+        echo "You must define BIT=(32/64) on MSYS"
         exit 1
     fi
 fi
 # make threads
 mkjobs=4
-if [ "${MKJOBS:-}" != "" ]; then
+if [ ! -z "${MKJOBS:-}" ]; then
     mkjobs="${MKJOBS}"
 fi
 # prefix to the osmesa installation
