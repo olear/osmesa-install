@@ -16,32 +16,32 @@ if [ "${MKJOBS:-}" != "" ]; then
 fi
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
-if [ "${OSMESA_INSTALL_PREFIX:-}" != "" ]; then
+if [ ! -z "${OSMESA_INSTALL_PREFIX:-}" ]; then
     osmesaprefix="${OSMESA_INSTALL_PREFIX}"
 fi
 # mesa version
 mesaversion=12.0.1
-if [ "${MESA_VERSION:-}" != "" ]; then
+if [ ! -z "${MESA_VERSION:-}" ]; then
     mesaversion="${MESA_VERSION}"
 fi
 # mesa-demos version
 demoversion=8.3.0
-if [ "${MESA_DEMO_VERSION:-}" != "" ]; then
+if [ ! -z "${MESA_DEMO_VERSION:-}" ]; then
     demoversion="${MESA_DEMO_VERSION}"
 fi
 # glu version
 gluversion=9.0.0
-if [ "${GLU_VERSION:-}" != "" ]; then
+if [ ! -z "${GLU_VERSION:-}" ]; then
     gluversion="${GLU_VERSION}"
 fi
 # set debug to 1 to compile a version with debugging symbols
 debug=0
-if [ "${OSMESA_DEBUG:-}" = "1" ]; then
+if [ "${OSMESA_DEBUG:-}" = 1 ]; then
     debug=1
 fi
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
-if [ "${OSMESA_CLEAN:-}" = "0" ]; then
+if [ "${OSMESA_CLEAN:-}" = 0 ]; then
     clean=0
 fi
 # set osmesadriver to:
@@ -50,22 +50,22 @@ fi
 # - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=3
-if [ "${OSMESA_DRIVER:-}" != "" ]; then
+if [ ! -z "${OSMESA_DRIVER:-}" ]; then
     osmesadriver="${OSMESA_DRIVER}"
 fi
 # do we want a mangled mesa + GLU ?
 mangled=1
-if [ "${OSMESA_MANGLED:-}" = "0" ]; then
+if [ "${OSMESA_MANGLED:-}" = 0 ]; then
     mangled=0
 fi
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
-if [ "${LLVM_INSTALL_PREFIX:-}" != "" ]; then
+if [ ! -z "${LLVM_INSTALL_PREFIX:-}" ]; then
     llvmprefix="${LLVM_INSTALL_PREFIX}"
 fi
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
-if [ "${BUILD_LLVM:-}" = "1" ]; then
+if [ "${BUILD_LLVM:-}" = 1 ]; then
     buildllvm=1
 fi
 llvmversion=3.8.1
@@ -75,7 +75,7 @@ elif [ "$mingw" = 1 ]; then
     # the scons build system on win does not support llvm 3.8 yet
     llvmversion=3.7.1
 fi
-if [ "${LLVM_VERSION:-}" != "" ]; then
+if [ ! -z "${LLVM_VERSION:-}" ]; then
     llvmversion="${LLVM_VERSION}"
 fi
 
@@ -106,7 +106,7 @@ elif [ "$osmesadriver" = 3 ]; then
     fi
 else
     echo "Error: osmesadriver must be 1, 2 or 3"
-    exit
+    exit 1
 fi
 if [ "$clean" = 1 ]; then
     echo "- clean sources"
@@ -142,13 +142,13 @@ fi
 llvmlibs=
 if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
    echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
-   exit
+   exit 1
 fi
 if [ "$osmesadriver" = 3 ]; then
    if [ "$buildllvm" = 1 ]; then
       if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
         echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
-        exit
+        exit 1
       fi
       # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
       if [ "$clean" = 1 ]; then
