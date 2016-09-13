@@ -133,6 +133,9 @@ if [ `uname` = Darwin ]; then
     #CC=clang-mp-3.4
     #CXX=clang++-mp-3.4
   fi
+elif [ `uname` = Linux ] && [ `uname -m` = x86_64 ]; then
+    CFLAGS="$CFLAGS -fPIC"
+    CXXFLAGS="$CXXFLAGS -fPIC"
 fi
 
 
@@ -517,9 +520,9 @@ else
     LIBS32="-lOSMesa32 -lGLU"
 fi
 
-if [ `uname` = "Linux" ]; then
-    LIBS32="${LIBS32} -pthread -ldl -lcrypto -lz -lcurses"
-fi
+#if [ `uname` = "Linux" ]; then
+#    LIBS32="${LIBS32} -pthread -ldl -lcrypto -lz -lcurses"
+#fi
 
 echo c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
